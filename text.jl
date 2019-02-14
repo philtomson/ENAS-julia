@@ -71,5 +71,5 @@ mutable struct Corpus
 end
 
 #Test:
-corpus = Corpus("/home/patomson/devel/ENAS-pytorch/data/ptb")   
+corpus = Corpus("../ENAS-pytorch/data/ptb")   
 
