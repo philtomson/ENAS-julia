@@ -29,6 +29,13 @@ args = parse_args(ARGS, s)
 for a in args
    println(" $(a[1]) => $(a[2])")
 end
+# You'll have to wrap the `dict` in a struct and then do 
+# `getproperty(x::MyStruct, field::Symbol) = x.dict[String(field)]`
+#
+# Harrison Grodin   [6 days ago]
+# Afaik, `getfield(x, :dict)`, or you'll get a i
+# StackOverflowError from recursively calling (implicit) 
+# `getproperty`.
 
 #args = let random_seed=42, 
 #           data_path="../ENAS-pytorch/data/ptb"; () -> Any[random_seed, data_path]; end
@@ -83,7 +90,7 @@ b = rand(64,1000)
 right = (b * w_hc)
 
 #best network from paper
-function network(xi, hi, w_xc, w_xh, W_h, W_c)
+function network(xi, hi, w_xc, W_h, W_c)
    println("size(xi): $(size(xi))")
    println("size(hi): $(size(hi))")
    println("size(w_hc): $(size(w_hc))")
@@ -172,7 +179,7 @@ function network(xi, hi, w_xc, w_xh, W_h, W_c)
    c12  = sigmoid.(w_c(h9))   
    h12  = (c12 .*  relu.(w_h(h9)) + 
                   (1 .-c9).*h9) #leaf
-   Flux.softmax(mean([h3,h6,h7,h10,h11,h12]))
+   mean([h3,h6,h7,h10,h11,h12])
 end
 
 #function loss(xs, ys)
@@ -185,6 +192,7 @@ function loss(xs, ys)
 end
 
 ys = network(randn(64,1000),randn(64,1000),W_xc,W_xh,w_h,w_c)
+ys = Flux.softmax(ys)
 
 ce_loss = loss(ys, randn(64,1000))
 print("ce_loss is: $ce_loss")

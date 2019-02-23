@@ -38,6 +38,8 @@ end
 mutable struct ChildRNN
    w_xc #weights x->c
    w_xh #weights x->h
+   w_hh
+   w_hc
    w_c::DefaultDict  #default dict
    w_h::DefaultDict  #default dict
 end
@@ -48,8 +50,110 @@ function ChildRNN(shared_embed, shared_hid, batch_size, num_blocks=NUM_BLOCKS,in
    init_wdict([w_c,w_h],num_blocks,shared_hid)
    ChildRNN(Linear(shared_embed,shared_hid),
             Linear(shared_embed,shared_hid),
+            (randn(shared_embed, shared_hid)),
+            (randn(shared_embed, shared_hid)),
             w_c,
             w_h)
 end
 
+function loss(xs, ys)
+  l = sum(sqrt.((xs .- ys).^2))
+  return l
+end
+
+function (m::ChildRNN)(xi,hi)
+   w_xc, w_hc, W_h, W_c = m.w_xc, m.w_hc, m.w_h, m.w_c 
+   w_hh, w_hc = m.w_hh, m.w_hc
+   left = w_xc(xi)
+   right = hi * w_hc
+   c1 = sigmoid.(left .+ right)
+
+   h1 = (c1 .*  tanh.(xi  + hi * w_hh)  .+ (1 .- c1) .* hi)
+
+   w_h = W_h[1][2]
+   w_c = W_c[1][2]
+   c2  = sigmoid.(w_c(h1))   
+   h2  = (c2 .*  tanh.(w_h(h1)) + 
+                (1 .- c2) .* h1)
+
+   w_h = W_h[2][3]
+   w_c = W_c[2][3]
+   c3  = sigmoid.(w_c(h2))   
+   h3  = (c3 .*  tanh.(w_h(h2)) + 
+                (1 .- c2) .* h2) #leaf
+
+
+   w_h = W_h[2][4]
+   w_c = W_c[2][4]
+   c4  = sigmoid.(w_c(h2))   
+   h4  = (c4 .*  relu.(w_h(h2)) + 
+                (1 .- c2) .* h2) #leaf
+
+   w_h = W_h[4][5]
+   w_c = W_c[4][5]
+   c5  = sigmoid.(w_c(h4))   
+   h5  = (c5 .*  relu.(w_h(h4)) + 
+                (1 .- c4).* h4) 
+
+
+   w_h = W_h[4][6]
+   w_c = W_c[4][6]
+   c6  = sigmoid.(w_c(h4))   
+   h6  = (c6 .*  tanh.(w_h(h4)) + 
+                (1 .-c4) .* h4) #leaf
+
+
+   w_h = W_h[4][7]
+   w_c = W_c[4][7]
+   c7  = sigmoid.(w_c(h4))   
+   h7  = (c6 .*  relu.(w_h(h4)) + 
+                (1 .- c4).*h4) #leaf
+
+   w_h = W_h[5][8]
+   w_c = W_c[5][8]
+   c8  = sigmoid.(w_c(h5))   
+   h8  = (c8 .*  relu.(w_h(h5)) + 
+                (1 .- c5).*h5) 
+
+   w_h = W_h[8][9]
+   w_c = W_c[8][9]
+   c9  = sigmoid.(w_c(h8))   
+   h9  = (c9 .*  relu.(w_h(h8)) + 
+                (1 .-c8).*h8) 
+
+   w_h = W_h[9][10]
+   w_c = W_c[9][10]
+   c10  = sigmoid.(w_c(h9))   
+   h10  = (c10 .*  relu.(w_h(h9)) + 
+                  (1 .-c9).*h9) #leaf
+
+   w_h = W_h[9][11]
+   w_c = W_c[9][11]
+   c11  = sigmoid.(w_c(h9))   
+   h11  = (c11 .*  relu.(w_h(h9)) + 
+                  (1 .-c9).*h9) #leaf
+
+   w_h = W_h[9][12]
+   w_c = W_c[9][12]
+   c12  = sigmoid.(w_c(h9))   
+   h12  = (c12 .*  relu.(w_h(h9)) + 
+                  (1 .-c9).*h9) #leaf
+   mean([h3,h6,h7,h10,h11,h12])
+end
+
+Flux.@treelike ChildRNN
+m_rnn = Chain(
+              ChildRNN(shared_embed, shared_hid, BATCH_SIZE),
+              Flux.softmax
+              )
+
+x = rand(64,1000)
+
 rnn = ChildRNN(shared_embed, shared_hid, BATCH_SIZE)
+#yhat = Flux.softmax(rnn(x,zeros(64,1000)))
+yhat = (rnn(rand(64,1000),zeros(64,1000)))
+ce_loss = loss(yhat, randn(64,1000))
+print("ce_loss is: $ce_loss")
+
+@code_typed(gradient(loss, m_rnn, x, zeros(64,1000)))
+
