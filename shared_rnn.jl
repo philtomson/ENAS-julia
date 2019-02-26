@@ -42,6 +42,7 @@ mutable struct ChildRNN
    w_hc
    w_c::DefaultDict  #default dict
    w_h::DefaultDict  #default dict
+   h
 end
 
 function ChildRNN(shared_embed, shared_hid, batch_size, num_blocks=NUM_BLOCKS,init=randn) 
@@ -53,7 +54,8 @@ function ChildRNN(shared_embed, shared_hid, batch_size, num_blocks=NUM_BLOCKS,in
             (randn(shared_embed, shared_hid)),
             (randn(shared_embed, shared_hid)),
             w_c,
-            w_h)
+            w_h,
+            zeros(batch_size,shared_hid))
 end
 
 function loss(xs, ys)
@@ -138,8 +140,11 @@ function (m::ChildRNN)(xi,hi)
    c12  = sigmoid.(w_c(h9))   
    h12  = (c12 .*  relu.(w_h(h9)) + 
                   (1 .-c9).*h9) #leaf
-   mean([h3,h6,h7,h10,h11,h12])
+   output = mean([h3,h6,h7,h10,h11,h12])
+   return output, h12
 end
+
+hidden(m::ChildRNN) = m.h
 
 Flux.@treelike ChildRNN
 m_rnn = Chain(
@@ -152,8 +157,22 @@ x = rand(64,1000)
 rnn = ChildRNN(shared_embed, shared_hid, BATCH_SIZE)
 #yhat = Flux.softmax(rnn(x,zeros(64,1000)))
 yhat = (rnn(rand(64,1000),zeros(64,1000)))
-ce_loss = loss(yhat, randn(64,1000))
+ce_loss = loss(yhat[1], randn(64,1000))
 print("ce_loss is: $ce_loss")
 
-@code_typed(gradient(loss, m_rnn, x, zeros(64,1000)))
+#OK, forget Chain, make our own model chain:
+child = ChildRNN(shared_embed, shared_hid, BATCH_SIZE)
+
+function model(x,y)
+   yhat    = child(x,zeros(64,1000))
+   ce_loss = loss(yhat[1], y)
+   return ce_loss
+end
+
+nabla = Zygote.gradient(model, (rand(64,1000), rand(64,1000))...)
+
+#@code_typed(gradient(loss, m_rnn, x, zeros(64,1000)))
+@code_typed Zygote.gradient(model, (rand(64,1000), rand(64,1000))...)
+
+Zygote.@code_adjoint model(rand(64,1000), rand(64,1000))
 

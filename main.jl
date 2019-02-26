@@ -37,6 +37,17 @@ end
 # StackOverflowError from recursively calling (implicit) 
 # `getproperty`.
 
+
+#import Base.getindex 
+mutable struct MyArgs
+   d
+end
+
+args = MyArgs(args)
+Base.getproperty(s::MyArgs, field::Symbol) = getfield(s, :d)[String(field)]
+#Base.getindex(dd::MyArgs, field::Symbol) = getproperty(dd, field)
+println(args.epochs)
+
 #args = let random_seed=42, 
 #           data_path="../ENAS-pytorch/data/ptb"; () -> Any[random_seed, data_path]; end
 function main(args)
