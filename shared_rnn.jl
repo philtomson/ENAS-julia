@@ -1,4 +1,4 @@
-using Random
+
 using ArgParse
 using Statistics
 using Flux
@@ -15,6 +15,13 @@ mutable struct Node
 end
 
 Node(id::Integer, sigma=tanh) = Node(id,sigma)
+
+struct Leaf
+end
+
+
+dag = Dict(0=> [Node(1, tanh)], 1=> [Node(2,tanh)], 2=> [Node(3,tanh),Node(4,relu)],3=>[Leaf],4=>[Node(5,tanh),Node(6,tanh),Node(7,relu)], 5=>[Node(8,relu)],8=>[Node(9,relu)],9=> [Node(10,relu),Node(11,relu), Node(12,relu)])
+
 
 struct Linear
   W
@@ -61,6 +68,13 @@ end
 function loss(xs, ys)
   l = sum(sqrt.((xs .- ys).^2))
   return l
+end
+
+function cell(x, h_prev, dag)
+   c = Dict()
+   h = Dict()
+   f = Dict()
+
 end
 
 function (m::ChildRNN)(xi,hi)
