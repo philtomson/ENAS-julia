@@ -4,6 +4,7 @@ using Statistics
 using Flux
 using DataStructures
 using Zygote
+include("./utils.jl")
 
 shared_embed = 1000
 shared_hid   = 1000
@@ -20,7 +21,7 @@ struct Leaf
 end
 
 
-dag = Dict(0=> [Node(1, tanh)], 1=> [Node(2,tanh)], 2=> [Node(3,tanh),Node(4,relu)],3=>[Leaf],4=>[Node(5,tanh),Node(6,tanh),Node(7,relu)], 5=>[Node(8,relu)],8=>[Node(9,relu)],9=> [Node(10,relu),Node(11,relu), Node(12,relu)])
+dag = Dict(0=> [Node(1, tanh)], 1=> [Node(2,tanh)], 2=> [Node(3,tanh),Node(4,relu)],3=>[Leaf],4=>[Node(5,tanh),Node(6,tanh),Node(7,relu)], 5=>[Node(8,relu)],7=>[Leaf], 8=>[Node(9,relu)],9=> [Node(10,relu),Node(11,relu), Node(12,relu)],10=>[Leaf],11=>[Leaf],12=>[Leaf])
 
 
 struct Linear
@@ -70,10 +71,47 @@ function loss(xs, ys)
   return l
 end
 
-function cell(x, h_prev, dag)
+function cell(rnn::ChildRNN, x, h_prev, dag)
    c = Dict()
    h = Dict()
    f = Dict()
+
+   f[0] = dag[0][1].sigma
+   c[0] = sigmoid(rnn.w_xc(x) .+ (h_prev * w_hc))
+   h[0] = (c[0] .* f[0].(xi + h_prev * rnn.w_hh) .+ (1 .- c[0]) .* h_prev)
+
+   leaf_node_ids = []
+   q = DataStructures.Deque{Int}()
+   pushfront!(q,1)
+
+   # The following algorithm does a breadth-first (since `q.popleft()` is
+   # used) search over the nodes and computes all the hidden states.
+   while true
+      if(length(q) == 0)
+         break
+      end
+      node_id = popfirst!(q)
+      nodes = dag[node_id]
+      for next_node in nodes
+         if typeof(next_node) == Leaf
+            push!(leaf_node_ids,node_id)
+            continue
+         end
+         next_id = next_node.id
+         w_h = rnn.w_h[node_id][next_id]
+         w_c = rnn.w_c[node_id][next_id]
+         f[next_id] = next_node.sigma
+         c[next_id] = sigmoid(w_c(h[node_id]))
+         h[next_id] = (c[next_id] .* f[next_id](w_h(h[node_id])) +
+                                     (1 .- c[next_id]) .* h[node_id])
+         push!(q, next_id)
+      end #for
+   end #while
+   leaf_nodes = [h[node_id] for node_id in leaf_node_ids]
+   #TODO:output = mean
+
+
+   return(c[0], h[0], f[0])
 
 end
 
@@ -82,8 +120,10 @@ function (m::ChildRNN)(xi,hi)
    w_hh, w_hc = m.w_hh, m.w_hc
    left = w_xc(xi)
    right = hi * w_hc
+   println("size(hi): $(size(hi))")
+   println("size(w_hc): $(size(w_hc))")
+   println("size(right): $(size(right))")
    c1 = sigmoid.(left .+ right)
-
    h1 = (c1 .*  tanh.(xi  + hi * w_hh)  .+ (1 .- c1) .* hi)
 
    w_h = W_h[1][2]
@@ -182,6 +222,8 @@ function model(x,y)
    ce_loss = loss(yhat[1], y)
    return ce_loss
 end
+
+println(cell(child, x, zeros(64,1000),dag))
 
 nabla = Zygote.gradient(model, (rand(64,1000), rand(64,1000))...)
 
