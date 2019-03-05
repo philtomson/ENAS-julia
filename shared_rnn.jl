@@ -21,7 +21,7 @@ struct Leaf
 end
 
 
-dag = Dict(0=> [Node(1, tanh)], 1=> [Node(2,tanh)], 2=> [Node(3,tanh),Node(4,relu)],3=>[Leaf],4=>[Node(5,tanh),Node(6,tanh),Node(7,relu)], 5=>[Node(8,relu)],7=>[Leaf], 8=>[Node(9,relu)],9=> [Node(10,relu),Node(11,relu), Node(12,relu)],10=>[Leaf],11=>[Leaf],12=>[Leaf])
+dag = Dict(0=> [Node(1, tanh)], 1=> [Node(2,tanh)], 2=> [Node(3,tanh),Node(4,relu)],3=>[Leaf],4=>[Node(5,tanh),Node(6,tanh),Node(7,relu)], 5=>[Node(8,relu)], 6=>[Leaf], 7=>[Leaf], 8=>[Node(9,relu)],9=> [Node(10,relu),Node(11,relu), Node(12,relu)],10=>[Leaf],11=>[Leaf],12=>[Leaf])
 
 
 struct Linear
@@ -76,18 +76,16 @@ function cell(rnn::ChildRNN, x, h_prev, dag)
    h = Dict()
    f = Dict()
 
-   f[0] = dag[0][1].sigma
+   f[1] = dag[0][1].sigma
    println("h_prev size: $(size(h_prev))")
    println("rnn.w_hc size: $(size(rnn.w_hc))")
-   c[0] = sigmoid.(rnn.w_xc(x) .+ (h_prev * rnn.w_hc))
-   h[0] = (c[0] .* f[0].(x + h_prev * rnn.w_hh) .+ (1 .- c[0]) .* h_prev)
+   c[1] = sigmoid.(rnn.w_xc(x) .+ (h_prev * rnn.w_hc))
+   h[1] = (c[1] .* f[1].(x + h_prev * rnn.w_hh) .+ (1 .- c[1]) .* h_prev)
 
    leaf_node_ids = []
    q = DataStructures.Deque{Int}()
    pushfirst!(q,1)
 
-   # The following algorithm does a breadth-first (since `q.popleft()` is
-   # used) search over the nodes and computes all the hidden states.
    while true
       if(length(q) == 0)
          break
@@ -96,12 +94,18 @@ function cell(rnn::ChildRNN, x, h_prev, dag)
       @show node_id
       nodes = dag[node_id]
       for next_node in nodes
-         if typeof(next_node) == Leaf
+         @show next_node
+         if next_node == Leaf
             push!(leaf_node_ids,node_id)
             continue
          end
+         @show next_node
          next_id = next_node.id
          @show next_id
+#         println("w_c[$node_id][$next_id]")
+
+         @show keys(rnn.w_h)
+         @show keys(rnn.w_c)
          w_h = rnn.w_h[node_id][next_id]
          w_c = rnn.w_c[node_id][next_id]
          f[next_id] = next_node.sigma
@@ -112,10 +116,10 @@ function cell(rnn::ChildRNN, x, h_prev, dag)
       end #for
    end #while
    leaf_nodes = [h[node_id] for node_id in leaf_node_ids]
-   #TODO:output = mean
+   @show size(leaf_nodes)
+   output = mean(leaf_nodes)
 
-
-   return(c[0], h[0], f[0])
+   return(output, h[NUM_BLOCKS])
 
 end
 
@@ -226,7 +230,7 @@ function model(x,y)
    ce_loss = loss(yhat[1], y)
    return ce_loss
 end
-
+#forward eval of child rnn:
 println(cell(child, x, zeros(64,1000),dag))
 
 nabla = Zygote.gradient(model, (rand(64,1000), rand(64,1000))...)
