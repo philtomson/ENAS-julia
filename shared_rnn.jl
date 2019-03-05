@@ -77,12 +77,14 @@ function cell(rnn::ChildRNN, x, h_prev, dag)
    f = Dict()
 
    f[0] = dag[0][1].sigma
-   c[0] = sigmoid(rnn.w_xc(x) .+ (h_prev * w_hc))
-   h[0] = (c[0] .* f[0].(xi + h_prev * rnn.w_hh) .+ (1 .- c[0]) .* h_prev)
+   println("h_prev size: $(size(h_prev))")
+   println("rnn.w_hc size: $(size(rnn.w_hc))")
+   c[0] = sigmoid.(rnn.w_xc(x) .+ (h_prev * rnn.w_hc))
+   h[0] = (c[0] .* f[0].(x + h_prev * rnn.w_hh) .+ (1 .- c[0]) .* h_prev)
 
    leaf_node_ids = []
    q = DataStructures.Deque{Int}()
-   pushfront!(q,1)
+   pushfirst!(q,1)
 
    # The following algorithm does a breadth-first (since `q.popleft()` is
    # used) search over the nodes and computes all the hidden states.
@@ -91,6 +93,7 @@ function cell(rnn::ChildRNN, x, h_prev, dag)
          break
       end
       node_id = popfirst!(q)
+      @show node_id
       nodes = dag[node_id]
       for next_node in nodes
          if typeof(next_node) == Leaf
@@ -98,11 +101,12 @@ function cell(rnn::ChildRNN, x, h_prev, dag)
             continue
          end
          next_id = next_node.id
+         @show next_id
          w_h = rnn.w_h[node_id][next_id]
          w_c = rnn.w_c[node_id][next_id]
          f[next_id] = next_node.sigma
-         c[next_id] = sigmoid(w_c(h[node_id]))
-         h[next_id] = (c[next_id] .* f[next_id](w_h(h[node_id])) +
+         c[next_id] = sigmoid.(w_c(h[node_id]))
+         h[next_id] = (c[next_id] .* f[next_id].(w_h(h[node_id])) +
                                      (1 .- c[next_id]) .* h[node_id])
          push!(q, next_id)
       end #for
