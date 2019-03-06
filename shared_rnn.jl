@@ -120,6 +120,14 @@ function cell(rnn::ChildRNN, x, h_prev, dag)
    output = mean(leaf_nodes)
 
    return(output, h[NUM_BLOCKS])
+end
+
+function forward(inputs, dag, hidden=nothing)
+   time_steps = size(inputs,1)
+   batch_size = size(inputs,2)
+   if(hidden == nothing)
+      #TODO: hidden = 
+   end
 
 end
 
